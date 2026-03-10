@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="DRR Alert">
+<meta name="application-name" content="DRR Alert">
+<meta name="theme-color" content="#C0001A">
+<meta name="description" content="Barangay Emergency Response System — Mag-ulat ng emergency agad">
+<link rel="manifest" href="manifest.json">
+<title>DRR Alert</title>
+
+<!-- Bootstrap 5 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+/* ── Reset & Root ── */
+*, *::before, *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+:root {
+  --red:      #C0001A;
+  --red-dk:   #8B0013;
+  --red-lt:   #FFEBEE;
+  --white:    #FFFFFF;
+  --bg:       #F5F5F5;
+  --border:   #E5E5E5;
+  --text:     #111111;
+  --muted:    #777777;
+  --green:    #1B7A34;
+  --green-bg: #E6F4EB;
+  --gold:     #9A6F00;
+  --gold-bg:  #FFF8E1;
+  --blue:     #1565C0;
+  --blue-bg:  #E3F0FF;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+html {
+  height: 100%;
+  /* Prevent overscroll bounce on iOS */
+  overscroll-behavior: none;
+}
+body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  font-family: 'Nunito', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  /* Prevent iOS font size adjustment */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── App root fills entire screen ── */
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--white);
+  /* safe area padding */
+  padding-left: var(--safe-l);
+  padding-right: var(--safe-r);
+}
+
+/* ── Screen system ── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  overflow: hidden;
+  visibility: hidden;
+}
+.screen.active { transform: translateX(0); visibility: visible; }
+.screen.exit   { transform: translateX(-28%); visibility: visible; }
+
+/* camera screen has no safe-top padding (full bleed) */
+#screen-camera { padding-top: 0; }
+
+.screen-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.screen-scroll::-webkit-scrollbar { display: none; }
+
+
+/* ── Safe-area bottom spacer ── */
+.safe-bot { height: var(--safe-b); background: inherit; flex-shrink: 0; }
+
+
+/* ════════════════════════════════
+   SCREEN 1 — HOME
+════════════════════════════════ */
+.home-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 8px) + 4px) 18px 4px;
+  flex-shrink: 0;
+}
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; color: var(--text);
+  transition: background 0.15s;
+}
+.icon-btn:active { background: #f0f0f0; }
+.bell-wrap { position: relative; }
+.bell-dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red); border: 2px solid white;
+}
+
+.seal-block {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 0 4px; flex-shrink: 0;
+}
+.seal-circle {
+  width: 70px; height: 70px; border-radius: 50%;
+  background: linear-gradient(145deg, #d8eaf5, #b2cfe0);
+  border: 3px solid #a8c8de;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.2rem;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.12);
+}
+.seal-name {
+  margin-top: 6px;
+  font-size: 0.6rem; font-weight: 700;
+  color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.5px; text-align: center; line-height: 1.5;
+}
+
+/* SOS */
+.sos-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 0 0; flex-shrink: 0;
+}
+.sos-ring {
+  width: 196px; height: 196px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  animation: ringPulse 2.6s ease-in-out infinite;
+}
+.sos-ring::before {
+  content: '';
+  position: absolute;
+  width: 214px; height: 214px; border-radius: 50%;
+  border: 1.5px solid rgba(192,0,26,0.18);
+  animation: ringGrow 2.6s ease-out infinite;
+}
+@keyframes ringPulse {
+  0%,100% { background: rgba(192,0,26,0.08); }
+  50%      { background: rgba(192,0,26,0.15); }
+}
+@keyframes ringGrow {
+  0%   { transform: scale(0.92); opacity: 0.7; }
+  100% { transform: scale(1.3);  opacity: 0; }
+}
+.sos-btn {
+  width: 158px; height: 158px; border-radius: 50%;
+  background: var(--red);
+  border: none; cursor: pointer;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  box-shadow: 0 8px 32px rgba(192,0,26,0.42), 0 2px 8px rgba(0,0,0,0.12);
+  transition: transform 0.12s, box-shadow 0.12s;
+  touch-action: manipulation;
+}
+.sos-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 4px 16px rgba(192,0,26,0.32);
+}
+.sos-tag {
+  background: white; color: var(--red);
+  font-size: 0.62rem; font-weight: 900;
+  padding: 2px 9px; border-radius: 4px; letter-spacing: 2px;
+}
+.sos-main {
+  color: white; font-size: 1rem; font-weight: 900;
+  text-align: center; line-height: 1.25; letter-spacing: 0.3px;
+}
+
+.status-pill {
+  margin-top: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 20px;
+  font-size: 0.67rem; font-weight: 800; letter-spacing: 0.5px;
+  border: 1px solid transparent;
+  transition: all 0.3s;
+}
+.status-pill.online  { background: var(--green-bg); color: var(--green); border-color: rgba(27,122,52,0.2); }
+.status-pill.offline { background: var(--gold-bg);  color: var(--gold);  border-color: rgba(154,111,0,0.2); }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  animation: blinkDot 1.6s ease-in-out infinite;
+}
+.online  .status-dot { background: var(--green); }
+.offline .status-dot { background: var(--gold); }
+@keyframes blinkDot { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.gps-bar {
+  margin: 10px 16px 0;
+  background: #f8f8f8; border: 1px solid var(--border);
+  border-radius: 11px; padding: 9px 14px;
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0; font-size: 0.66rem; color: var(--muted);
+}
+.gps-bar i { color: var(--red); font-size: 0.9rem; }
+#gps-text  { color: var(--text); font-weight: 700; font-size: 0.64rem; }
+.gps-acc-tag {
+  margin-left: auto; padding: 2px 8px; border-radius: 6px;
+  font-size: 0.58rem; font-weight: 800;
+}
+.gps-acc-tag.good { background: var(--green-bg); color: var(--green); }
+.gps-acc-tag.warn { background: var(--gold-bg);  color: var(--gold); }
+.gps-acc-tag.err  { background: var(--red-lt);   color: var(--red); }
+
+.quick-grid {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 10px; padding: 12px 16px 0; flex-shrink: 0;
+}
+.qbtn {
+  background: white; border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 12px 6px 10px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 5px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+}
+.qbtn:active { background: #f4f4f4; border-color: #ccc; }
+.qbtn-icon  { font-size: 1.5rem; line-height: 1; }
+.qbtn-label { font-size: 0.68rem; font-weight: 800; color: var(--text); }
+.qbtn-sub   { font-size: 0.54rem; color: var(--muted); text-align: center; line-height: 1.35; }
+
+.home-bottom-bar {
+  margin-top: auto; padding-bottom: calc(10px + var(--safe-b));
+  display: flex; justify-content: center; flex-shrink: 0;
+}
+.swipe-handle {
+  width: 134px; height: 4px; background: #ccc; border-radius: 4px;
+}
+
+
+/* ════════════════════════════════
+   DRAWER
+════════════════════════════════ */
+#drawer-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.52);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.28s;
+  backdrop-filter: blur(2px);
+}
+#drawer-overlay.open { opacity: 1; pointer-events: all; }
+#drawer {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: min(280px, 80vw);
+  background: white; z-index: 201;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column;
+  box-shadow: 5px 0 28px rgba(0,0,0,0.2);
+  padding-top: var(--safe-t);
+}
+#drawer.open { transform: translateX(0); }
+
+.drawer-head {
+  background: var(--red);
+  padding: 24px 20px 20px; flex-shrink: 0;
+}
+.drawer-appname {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2rem; font-weight: 900;
+  color: white; letter-spacing: 3px; line-height: 1;
+}
+.drawer-tagline { font-size: 0.62rem; color: rgba(255,255,255,0.72); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+.drawer-version { font-size: 0.58rem; color: rgba(255,255,255,0.45); margin-top: 2px; }
+
+.drawer-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.drawer-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 22px; cursor: pointer;
+  font-size: 0.9rem; font-weight: 700; color: var(--text);
+  transition: background 0.12s;
+  touch-action: manipulation;
+}
+.drawer-row:active { background: #f2f2f2; }
+.drawer-row i { font-size: 1.1rem; color: #999; width: 22px; text-align: center; flex-shrink: 0; }
+.drawer-row.red { color: var(--red); }
+.drawer-row.red i { color: var(--red); }
+.drawer-sep { height: 1px; background: var(--border); margin: 4px 22px; }
+.drawer-foot {
+  padding: 14px 22px; border-top: 1px solid var(--border);
+  font-size: 0.58rem; color: #bbb; line-height: 1.7;
+}
+
+
+/* ════════════════════════════════
+   SCREEN 2 — CAMERA
+════════════════════════════════ */
+#screen-camera { background: #000; }
+#cam-vf {
+  flex: 1; position: relative; overflow: hidden;
+  background: #0a0a0a;
+  display: flex; align-items: center; justify-content: center;
+}
+#cam-video {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+#cam-canvas { display: none; }
+
+.cam-top-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+  z-index: 6;
+}
+.cam-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.22);
+  color: white; font-size: 1.1rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; backdrop-filter: blur(6px);
+  transition: background 0.15s;
+  touch-action: manipulation;
+}
+.cam-btn:active { background: rgba(255,255,255,0.18); }
+.cam-btn.flash-on { color: #FFD54F; border-color: rgba(255,213,79,0.5); }
+
+/* corner guides */
+.cam-corner { position: absolute; width: 26px; height: 26px; z-index: 5; }
+.cam-corner.tl { top: calc(var(--safe-t) + 62px); left: 22px;
+  border-top: 2.5px solid rgba(255,255,255,0.85);
+  border-left: 2.5px solid rgba(255,255,255,0.85); border-radius: 3px 0 0 0; }
+.cam-corner.tr { top: calc(var(--safe-t) + 62px); right: 22px;
+  border-top: 2.5px solid rgba(255,255,255,0.85);
+  border-right: 2.5px solid rgba(255,255,255,0.85); border-radius: 0 3px 0 0; }
+.cam-corner.bl { bottom: 130px; left: 22px;
+  border-bottom: 2.5px solid rgba(255,255,255,0.85);
+  border-left: 2.5px solid rgba(255,255,255,0.85); border-radius: 0 0 0 3px; }
+.cam-corner.br { bottom: 130px; right: 22px;
+  border-bottom: 2.5px solid rgba(255,255,255,0.85);
+  border-right: 2.5px solid rgba(255,255,255,0.85); border-radius: 0 0 3px 0; }
+
+/* AI scan line */
+#scan-line {
+  position: absolute; left: 0; right: 0; height: 2px; z-index: 5;
+  background: linear-gradient(90deg, transparent, rgba(192,0,26,0.9) 40%, var(--red) 50%, rgba(192,0,26,0.9) 60%, transparent);
+  box-shadow: 0 0 12px rgba(192,0,26,0.7);
+  display: none;
+  animation: scan 2.6s ease-in-out infinite;
+}
+@keyframes scan {
+  0%   { top: 12%; opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { top: 86%; opacity: 0; }
+}
+
+/* AI badge */
+#ai-badge {
+  position: absolute; bottom: 132px;
+  left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.82);
+  border: 1.5px solid var(--red);
+  border-radius: 13px; padding: 10px 20px;
+  z-index: 6; display: none;
+  animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+  white-space: nowrap; text-align: center;
+  backdrop-filter: blur(10px);
+}
+@keyframes pop {
+  from { opacity:0; transform: translateX(-50%) scale(0.8); }
+  to   { opacity:1; transform: translateX(-50%) scale(1); }
+}
+.ai-lbl  { font-size: 0.56rem; color: var(--red); font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+.ai-type { font-family: 'Barlow Condensed', sans-serif; font-size: 1.45rem; font-weight: 800; color: white; letter-spacing: 1px; }
+.ai-conf { font-size: 0.58rem; color: #FFD54F; font-weight: 700; margin-top: 1px; }
+
+/* no camera state */
+#cam-blocked {
+  position: absolute; inset: 0; z-index: 4;
+  background: #0d0d0d;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  padding: 32px;
+}
+#cam-blocked i { font-size: 3.5rem; color: #333; }
+#cam-blocked p { color: #555; font-size: 0.82rem; text-align: center; line-height: 1.6; }
+.cam-retry-btn {
+  background: var(--red); border: none; border-radius: 12px;
+  padding: 12px 24px; color: white;
+  font-family: 'Nunito', sans-serif; font-size: 0.82rem; font-weight: 800;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+
+/* camera bottom controls */
+.cam-controls {
+  background: #000;
+  padding: 16px 24px calc(16px + var(--safe-b));
+  display: flex; flex-direction: column; gap: 14px;
+  flex-shrink: 0;
+}
+.cam-ctrl-row {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.gallery-thumb {
+  width: 48px; height: 48px; border-radius: 11px;
+  background: #1c1c1c; border: 2px solid #333;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; cursor: pointer; font-size: 1.3rem;
+  transition: border-color 0.2s;
+}
+.gallery-thumb:active { border-color: #666; }
+#gal-img { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 9px; }
+#gal-icon { color: #555; font-size: 1.4rem; }
+
+.shutter {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: 2.5px solid rgba(255,255,255,0.45);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; touch-action: manipulation;
+  transition: transform 0.1s;
+}
+.shutter:active { transform: scale(0.9); }
+.shutter-inner {
+  width: 58px; height: 58px; border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 20px rgba(255,255,255,0.25);
+}
+.compose-fallback-btn {
+  width: 100%; background: var(--red); border: none;
+  border-radius: 14px; padding: 14px;
+  color: white; font-family: 'Nunito', sans-serif;
+  font-size: 0.85rem; font-weight: 800; letter-spacing: 0.3px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 3px 16px rgba(192,0,26,0.4);
+  transition: transform 0.1s; touch-action: manipulation;
+}
+.compose-fallback-btn:active { transform: scale(0.98); }
+
+
+/* ════════════════════════════════
+   SCREEN 3 — CONFIRM
+════════════════════════════════ */
+.screen-hdr {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: white;
+}
+.back-btn {
+  background: none; border: none; cursor: pointer;
+  width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; color: var(--text);
+  transition: background 0.12s;
+  touch-action: manipulation;
+}
+.back-btn:active { background: #f0f0f0; }
+.hdr-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.08rem; font-weight: 800;
+  letter-spacing: 1.5px; text-transform: uppercase;
+}
+
+#confirm-map { height: 190px; flex-shrink: 0; z-index: 0; }
+.leaflet-pane { z-index: 1 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 2 !important; }
+
+.photo-thumb {
+  margin: 10px 16px 0;
+  height: 82px; border-radius: 12px;
+  border: 1.5px solid var(--border);
+  overflow: hidden; background: #f2f2f2;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 0.74rem; gap: 6px;
+  flex-shrink: 0;
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: none; }
+
+.info-cards { padding: 10px 16px 4px; display: flex; flex-direction: column; gap: 8px; }
+.info-card {
+  background: #fafafa; border: 1px solid var(--border);
+  border-radius: 13px; padding: 11px 13px;
+  display: flex; align-items: flex-start; gap: 11px;
+}
+.card-ico {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.ci-red  { background: var(--red-lt); }
+.ci-blue { background: var(--blue-bg); }
+.ci-gold { background: var(--gold-bg); }
+.ci-grn  { background: var(--green-bg); }
+.card-lbl { font-size: 0.56rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.card-val { font-size: 0.82rem; font-weight: 800; color: var(--text); margin-top: 2px; line-height: 1.35; }
+.card-sub { font-size: 0.63rem; color: var(--muted); margin-top: 2px; font-style: italic; }
+
+.validity-chips {
+  display: flex; gap: 7px;
+  padding: 6px 16px 4px; flex-shrink: 0;
+}
+.vchip {
+  flex: 1; border-radius: 9px; padding: 7px 6px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-size: 0.59rem; font-weight: 800;
+}
+.vchip.ok   { background: var(--green-bg); color: var(--green); border: 1px solid rgba(27,122,52,0.18); }
+.vchip.warn { background: var(--gold-bg);  color: var(--gold);  border: 1px solid rgba(154,111,0,0.18); }
+.vchip.bad  { background: var(--red-lt);   color: var(--red);   border: 1px solid rgba(192,0,26,0.18); }
+.vdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.vdot.ok   { background: var(--green); }
+.vdot.warn { background: var(--gold); }
+.vdot.bad  { background: var(--red); }
+
+.confirm-actions {
+  padding: 8px 16px calc(12px + var(--safe-b));
+  display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+}
+.btn-primary {
+  background: var(--red); border: none; border-radius: 14px;
+  padding: 15px; color: white;
+  font-family: 'Nunito', sans-serif; font-size: 0.9rem; font-weight: 900;
+  letter-spacing: 0.8px; text-transform: uppercase; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 4px 20px rgba(192,0,26,0.3);
+  transition: transform 0.1s; touch-action: manipulation;
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-secondary {
+  background: white; border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 13px; color: var(--muted);
+  font-family: 'Nunito', sans-serif; font-size: 0.82rem; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: background 0.12s; touch-action: manipulation;
+}
+.btn-secondary:active { background: #f4f4f4; }
+
+/* 5-sec countdown */
+#countdown-overlay {
+  position: absolute; inset: 0; z-index: 40;
+  background: rgba(0,0,0,0.78);
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  backdrop-filter: blur(5px);
+}
+#countdown-overlay.active { display: flex; }
+.cd-ring {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 4rem; font-weight: 900; color: white;
+  box-shadow: 0 0 50px rgba(192,0,26,0.55);
+  animation: cdPulse 1s ease-in-out infinite;
+}
+@keyframes cdPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
+.cd-lbl { color: white; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.cd-cancel {
+  background: rgba(255,255,255,0.13);
+  border: 1.5px solid rgba(255,255,255,0.28);
+  color: white; border-radius: 30px;
+  padding: 9px 26px; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; margin-top: 6px;
+  backdrop-filter: blur(4px); touch-action: manipulation;
+}
+.cd-cancel:active { background: rgba(255,255,255,0.22); }
+
+/* custom map pin */
+.map-pin-div {
+  width: 28px; height: 28px;
+  background: var(--red); border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 3px solid white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+
+
+/* ════════════════════════════════
+   SCREEN 4 — DONE
+════════════════════════════════ */
+#screen-done { background: white; }
+.done-inner {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 28px 28px 0;
+  position: relative; overflow: hidden;
+}
+.done-inner::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(45deg,transparent,transparent 32px,rgba(0,0,0,0.012) 32px,rgba(0,0,0,0.012) 33px);
+  pointer-events: none;
+}
+.done-ico {
+  width: 104px; height: 104px; border-radius: 50%;
+  background: linear-gradient(135deg, #43A047, #1B5E20);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3.2rem;
+  box-shadow: 0 10px 32px rgba(27,94,32,0.32);
+  margin-bottom: 24px; z-index: 1;
+  animation: doneIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes doneIn { from{transform:scale(0.2);opacity:0} to{transform:scale(1);opacity:1} }
+.done-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.75rem; font-weight: 900;
+  text-align: center; line-height: 1.15; letter-spacing: 1px;
+  margin-bottom: 12px; z-index: 1;
+}
+.done-desc {
+  font-size: 0.78rem; color: var(--muted);
+  text-align: center; line-height: 1.7;
+  max-width: 250px; margin-bottom: 20px; z-index: 1;
+}
+.done-refbox {
+  background: #f4f4f4; border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 22px;
+  font-size: 0.66rem; color: var(--muted); font-weight: 700; letter-spacing: 0.5px;
+  margin-bottom: 16px; z-index: 1;
+}
+.done-refbox b { color: var(--text); }
+.done-dispatch {
+  background: var(--red-lt); border: 1px solid rgba(192,0,26,0.14);
+  border-radius: 13px; padding: 13px 20px;
+  font-size: 0.73rem; color: var(--red); font-weight: 700;
+  text-align: center; margin-bottom: 26px; z-index: 1;
+  line-height: 1.6; max-width: 270px;
+}
+.done-actions {
+  padding: 0 24px calc(16px + var(--safe-b));
+  width: 100%; flex-shrink: 0;
+}
+
+
+/* ════════════════════════════════
+   SCREEN 5 — HOTLINES
+════════════════════════════════ */
+#screen-hotlines { background: var(--bg); }
+.offline-tag {
+  margin-left: auto;
+  background: var(--gold-bg); color: var(--gold);
+  font-size: 0.57rem; font-weight: 800;
+  padding: 3px 8px; border-radius: 6px;
+  border: 1px solid rgba(154,111,0,0.2);
+}
+.hotlines-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.hl-section-lbl {
+  font-size: 0.62rem; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1px;
+  padding: 6px 0 2px;
+}
+.hl-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: 14px; padding: 13px 14px;
+  display: flex; align-items: center; gap: 12px;
+  text-decoration: none; color: var(--text);
+  transition: background 0.12s; touch-action: manipulation;
+}
+.hl-card:active { background: #f4f4f4; }
+.hl-ico {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.35rem; flex-shrink: 0;
+}
+.hl-info { flex: 1; }
+.hl-name { font-size: 0.85rem; font-weight: 800; }
+.hl-num  { font-size: 0.72rem; color: var(--muted); margin-top: 1px; font-weight: 600; }
+.hl-call {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; transition: transform 0.1s;
+  touch-action: manipulation;
+}
+.hl-call:active { transform: scale(0.9); }
+.hl-call.emg { background: var(--red); color: white; }
+.hl-call.nrm { background: var(--green-bg); color: var(--green); }
+
+
+/* ════════════════════════════════
+   SCREEN 6 — COMPOSE
+════════════════════════════════ */
+#screen-compose { background: white; }
+.compose-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.form-lbl { font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; display: block; }
+.form-ctrl {
+  width: 100%; background: #fafafa;
+  border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px 14px;
+  font-family: 'Nunito', sans-serif; font-size: 0.86rem; font-weight: 600;
+  color: var(--text); outline: none;
+  transition: border-color 0.18s; appearance: none;
+}
+.form-ctrl:focus { border-color: var(--red); }
+.form-textarea { resize: none; height: 108px; line-height: 1.6; }
+.loc-preview {
+  background: var(--blue-bg); border: 1px solid rgba(21,101,192,0.2);
+  border-radius: 12px; padding: 11px 14px;
+  font-size: 0.73rem; color: var(--blue); font-weight: 700;
+  display: flex; align-items: flex-start; gap: 8px; line-height: 1.5;
+}
+.loc-preview i { flex-shrink: 0; margin-top: 2px; }
+
+
+/* ════════════════════════════════
+   TOAST
+════════════════════════════════ */
+#toast {
+  position: fixed;
+  bottom: calc(24px + var(--safe-b));
+  left: 50%; transform: translateX(-50%) translateY(16px);
+  background: #1a1a1a; color: white;
+  padding: 10px 20px; border-radius: 30px;
+  font-size: 0.78rem; font-weight: 700;
+  white-space: nowrap; opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 9999; pointer-events: none;
+  display: flex; align-items: center; gap: 7px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ════════ DRAWER ════════ -->
+  <div id="drawer-overlay" onclick="closeDrawer()"></div>
+  <div id="drawer">
+    <div class="drawer-head">
+      <div class="drawer-appname">DRR ALERT</div>
+      <div class="drawer-tagline">Barangay Emergency Response</div>
+      <div class="drawer-version">Prototype v1.0 · SJDM Bulacan</div>
+    </div>
+    <div class="drawer-list">
+      <div class="drawer-row" onclick="goHome(); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> Home
+      </div>
+      <div class="drawer-row" onclick="navTo('screen-hotlines'); closeDrawer()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg> Emergency Hotlines
+      </div>
+      <div class="drawer-row" onclick="stopCamera(); navTo('screen-compose'); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Mag-Compose ng Ulat
+      </div>
+      <div class="drawer-sep"></div>
+      <div class="drawer-row" onclick="showToast('🚧 Feature coming soon'); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Kasaysayan ng Ulat
+      </div>
+      <div class="drawer-row" onclick="showToast('🚧 Feature coming soon'); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> Gabay / Paano Gamitin
+      </div>
+      <div class="drawer-row" onclick="showToast('🚧 Feature coming soon'); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg> Tungkol sa App
+      </div>
+      <div class="drawer-sep"></div>
+      <div class="drawer-row red" onclick="showToast('🚨 False report line: 0800-DRR-SJDM'); closeDrawer()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="white" stroke-width="2" stroke-linecap="round"/></svg> I-Report ang False Alarm
+      </div>
+    </div>
+    <div class="drawer-foot">
+      DRR Alert · Open Source PWA<br>
+      Powered by Leaflet + Nominatim + OpenStreetMap
+    </div>
+  </div>
+
+  <!-- ════════ SCREEN 1: HOME ════════ -->
+  <div id="screen-home" class="screen active">
+
+    <div class="home-topbar">
+      <button class="icon-btn" onclick="openDrawer()" aria-label="Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button class="icon-btn bell-wrap" onclick="showToast('Walang bagong alerto')" aria-label="Notifications">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span class="bell-dot"></span>
+      </button>
+    </div>
+
+    <div class="seal-block">
+      <div class="seal-circle">🏛️</div>
+      <div class="seal-name">Lungsod ng San Jose del Monte<br>Bulacan — CDRRMO</div>
+    </div>
+
+    <div class="sos-wrap">
+      <div class="sos-ring">
+        <button class="sos-btn" id="sos-btn" onclick="handleSOS()" aria-label="Mag-ulat ng emergency">
+          <span class="sos-tag">SOS</span>
+          <span class="sos-main">MAG-ULAT NG<br>EMERGENCY</span>
+        </button>
+      </div>
+      <div class="status-pill online" id="status-pill">
+        <div class="status-dot"></div>
+        <span id="status-label">ONLINE</span>
+      </div>
+    </div>
+
+    <div class="gps-bar" id="gps-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      GPS: <span id="gps-text">Naghahanap ng lokasyon...</span>
+      <span class="gps-acc-tag warn" id="gps-acc">---</span>
+    </div>
+
+    <div class="quick-grid">
+      <div class="qbtn" onclick="navTo('screen-hotlines')" role="button" tabindex="0">
+        <span class="qbtn-icon">📞</span>
+        <span class="qbtn-label">Hotlines</span>
+        <span class="qbtn-sub">Mga contact kung offline</span>
+      </div>
+      <div class="qbtn" onclick="showToast('🚧 Kasaysayan coming soon')" role="button" tabindex="0">
+        <span class="qbtn-icon">📋</span>
+        <span class="qbtn-label">Mga Ulat</span>
+        <span class="qbtn-sub">Listahan ng mga ulat</span>
+      </div>
+      <div class="qbtn" onclick="stopCamera(); navTo('screen-compose')" role="button" tabindex="0">
+        <span class="qbtn-icon">✏️</span>
+        <span class="qbtn-label">I-Compose</span>
+        <span class="qbtn-sub">Mag-ulat nang text</span>
+      </div>
+    </div>
+
+  </div><!-- /screen-home -->
+
+
+  <!-- ════════ SCREEN 2: CAMERA ════════ -->
+  <div id="screen-camera" class="screen">
+    <div id="cam-vf">
+      <video id="cam-video" autoplay playsinline muted></video>
+      <canvas id="cam-canvas"></canvas>
+
+      <div id="cam-blocked">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h3a2 2 0 0 1 2 2v9.34"/><path d="M15 13a3 3 0 1 1-5.66-1.46"/></svg>
+        <p>Kailangan ng pahintulot sa camera.<br>Pindutin ang "Allow" kapag tinanong ng browser.</p>
+        <button class="cam-retry-btn" onclick="startCamera()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Subukan Ulit
+        </button>
+      </div>
+
+      <div class="cam-top-bar">
+        <button class="cam-btn" onclick="stopCamera(); navBack()" aria-label="Bumalik">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="cam-btn" onclick="flipCamera()" aria-label="Flip camera">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        </button>
+        <button class="cam-btn" id="flash-btn" onclick="toggleFlash()" aria-label="Flash">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </button>
+      </div>
+
+      <div class="cam-corner tl"></div>
+      <div class="cam-corner tr"></div>
+      <div class="cam-corner bl"></div>
+      <div class="cam-corner br"></div>
+
+      <div id="scan-line"></div>
+      <div id="ai-badge">
+        <div class="ai-lbl">🤖 AI Detection</div>
+        <div class="ai-type" id="ai-type">---</div>
+        <div class="ai-conf" id="ai-conf">Nagpo-proseso...</div>
+      </div>
+    </div>
+
+    <div class="cam-controls">
+      <div class="cam-ctrl-row">
+        <div class="gallery-thumb" onclick="openGallery()" role="button" aria-label="Gallery">
+          <img id="gal-img" alt="Gallery preview">
+          <svg id="gal-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="#666"/><polyline points="21 15 16 10 5 21"/></svg>
+        </div>
+        <div class="shutter" onclick="capturePhoto()" role="button" aria-label="Kumuha ng larawan">
+          <div class="shutter-inner"></div>
+        </div>
+        <div style="width:48px"></div>
+      </div>
+      <button class="compose-fallback-btn" onclick="stopCamera(); navTo('screen-compose')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> I-COMPOSE NALANG ANG ULAT
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ════════ SCREEN 3: CONFIRM ════════ -->
+  <div id="screen-confirm" class="screen">
+
+    <div class="screen-hdr">
+      <button class="back-btn" onclick="navBack()" aria-label="Bumalik">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="hdr-title">Kumpirmasyon ng Ulat</span>
+    </div>
+
+    <div id="confirm-map"></div>
+
+    <div class="photo-thumb" id="photo-thumb">
+      <img id="photo-preview" alt="Captured">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21 15 16 10 5 21"/></svg> Walang larawan
+    </div>
+
+    <div class="screen-scroll">
+      <div class="info-cards">
+        <div class="info-card">
+          <div class="card-ico ci-red" id="type-icon">🔥</div>
+          <div>
+            <div class="card-lbl">Uri ng Emergency (AI Vision)</div>
+            <div class="card-val" id="c-type">---</div>
+            <div class="card-sub" id="c-dept">---</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="card-ico ci-blue">📍</div>
+          <div>
+            <div class="card-lbl">Kasalukuyang Lokasyon</div>
+            <div class="card-val" id="c-address">Naglo-load ng address...</div>
+            <div class="card-sub" id="c-coords">---</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="card-ico ci-gold">🕐</div>
+          <div>
+            <div class="card-lbl">Oras ng Ulat</div>
+            <div class="card-val" id="c-time">---</div>
+            <div class="card-sub" id="c-ref">REFNUM: ---</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="validity-chips">
+        <div class="vchip ok" id="chip-gps"><div class="vdot ok"></div>GPS</div>
+        <div class="vchip ok" id="chip-dev"><div class="vdot ok"></div>Device</div>
+        <div class="vchip warn" id="chip-acc"><div class="vdot warn"></div>Accuracy</div>
+      </div>
+    </div>
+
+    <div class="confirm-actions">
+      <button class="btn-primary" onclick="startCountdown()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> IPADALA ANG ULAT
+      </button>
+      <button class="btn-secondary" onclick="navBack()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> I-KANSELA
+      </button>
+    </div>
+
+    <!-- Countdown overlay -->
+    <div id="countdown-overlay">
+      <div class="cd-ring" id="cd-num">5</div>
+      <div class="cd-lbl">Ipapadala sa loob ng...</div>
+      <button class="cd-cancel" onclick="cancelCountdown()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>&nbsp; I-KANSELA
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ════════ SCREEN 4: DONE ════════ -->
+  <div id="screen-done" class="screen">
+    <div class="done-inner">
+      <div class="done-ico">✓</div>
+      <div class="done-title">PAPUNTA NA<br>ANG TULONG</div>
+      <div class="done-desc" id="done-desc">
+        Naipadala na ang iyong ulat. Mangyaring maghintay at manatiling ligtas.
+      </div>
+      <div class="done-refbox">REF# <b id="done-ref">DRR----</b></div>
+      <div class="done-dispatch" id="done-dispatch">
+        📢 Naipadala sa: Bureau of Fire Protection<br>
+        ⏱ Response time: ~5–10 minuto
+      </div>
+    </div>
+    <div class="done-actions">
+      <button class="btn-primary" style="margin-bottom:10px" onclick="goHome()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> BUMALIK SA HOME
+      </button>
+      <button class="btn-secondary" onclick="shareReport()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> I-SHARE ANG ULAT
+      </button>
+    </div>
+    <div class="safe-bot"></div>
+  </div>
+
+
+  <!-- ════════ SCREEN 5: HOTLINES ════════ -->
+  <div id="screen-hotlines" class="screen">
+    <div class="screen-hdr">
+      <button class="back-btn" onclick="navBack()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <span class="hdr-title">Emergency Hotlines</span>
+      <span class="offline-tag">⚡ OFFLINE OK</span>
+    </div>
+    <div class="screen-scroll">
+      <div class="hotlines-list">
+        <div class="hl-section-lbl">🆘 Pangunahing Emergency</div>
+        <a class="hl-card" href="tel:911">
+          <div class="hl-ico" style="background:#FFEBEE">🆘</div>
+          <div class="hl-info"><div class="hl-name">Emergency Hotline</div><div class="hl-num">911 — Libre, 24/7</div></div>
+          <button class="hl-call emg"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:117">
+          <div class="hl-ico" style="background:#E3F0FF">🚔</div>
+          <div class="hl-info"><div class="hl-name">PNP Hotline</div><div class="hl-num">117 / (044) 760-2222</div></div>
+          <button class="hl-call emg"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:160">
+          <div class="hl-ico" style="background:#FFF3E0">🚒</div>
+          <div class="hl-info"><div class="hl-name">BFP — Bumbero</div><div class="hl-num">160 / (044) 760-3333</div></div>
+          <button class="hl-call emg"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:143">
+          <div class="hl-ico" style="background:#E6F4EB">🏥</div>
+          <div class="hl-info"><div class="hl-name">Red Cross / Ambulance</div><div class="hl-num">143 / (044) 760-4444</div></div>
+          <button class="hl-call emg"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <div class="hl-section-lbl" style="margin-top:4px">🏛️ Lokal na Opisina — SJDM</div>
+        <a class="hl-card" href="tel:+63447605555">
+          <div class="hl-ico" style="background:#EDE7F6">🏢</div>
+          <div class="hl-info"><div class="hl-name">CDRRMO SJDM</div><div class="hl-num">(044) 760-5555</div></div>
+          <button class="hl-call nrm"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:+63447606666">
+          <div class="hl-ico" style="background:#FFF8E1">🏘️</div>
+          <div class="hl-info"><div class="hl-name">Punong Barangay</div><div class="hl-num">(044) 760-6666</div></div>
+          <button class="hl-call nrm"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:1555">
+          <div class="hl-ico" style="background:#E3F0FF">🌊</div>
+          <div class="hl-info"><div class="hl-name">NDRRMC</div><div class="hl-num">1555 (toll-free)</div></div>
+          <button class="hl-call nrm"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+        <a class="hl-card" href="tel:1553">
+          <div class="hl-ico" style="background:#FFEBEE">⚡</div>
+          <div class="hl-info"><div class="hl-name">Meralco Emergency</div><div class="hl-num">16211 / 1553</div></div>
+          <button class="hl-call nrm"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79a15.91 15.91 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27c1.21.49 2.53.76 3.88.76a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.72 21 3 14.28 3 6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.35.27 2.67.76 3.88a1 1 0 0 1-.27 1.11l-2.37 1.8z"/></svg></button>
+        </a>
+      </div>
+    </div>
+    <div class="safe-bot" style="background:var(--bg)"></div>
+  </div>
+
+
+  <!-- ════════ SCREEN 6: COMPOSE ════════ -->
+  <div id="screen-compose" class="screen">
+    <div class="screen-hdr">
+      <button class="back-btn" onclick="navBack()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <span class="hdr-title">I-Compose ang Ulat</span>
+    </div>
+    <div class="screen-scroll">
+      <div class="compose-form">
+        <div>
+          <label class="form-lbl" for="ctype">Uri ng Emergency</label>
+          <select class="form-ctrl" id="ctype">
+            <option value="">— Pumili ng Uri —</option>
+            <option value="sunog">🔥 Sunog / Apoy</option>
+            <option value="baha">🌊 Baha / Tubig</option>
+            <option value="aksidente">🚗 Aksidente / Banggaan</option>
+            <option value="medikal">🏥 Medikal / Sugat</option>
+            <option value="krimen">🚔 Krimen / Banta</option>
+            <option value="lindol">🌍 Lindol / Pagyanig</option>
+            <option value="sunog-kagubatan">🌿 Sunog ng Kagubatan</option>
+            <option value="iba">⚠️ Iba Pa</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-lbl" for="cdesc">Ilarawan ang Sitwasyon</label>
+          <textarea class="form-ctrl form-textarea" id="cdesc"
+            placeholder="Ilarawan ang nangyayari nang detalyado. Halimbawa: May sunog sa 2-palapag na bahay sa kanto ng Rizal at Aguinaldo. May mga taong hindi makalabas."></textarea>
+        </div>
+        <div class="loc-preview">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span id="compose-loc">Naglo-load ng GPS lokasyon...</span>
+        </div>
+        <div>
+          <label class="form-lbl" for="cextra">Karagdagang Detalye (opsyonal)</label>
+          <input type="text" class="form-ctrl" id="cextra"
+            placeholder="hal: Tabi ng simbahan, 3rd floor, may 5 taong nasalanta...">
+        </div>
+        <button class="btn-primary" onclick="submitCompose()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg> IPADALA ANG ULAT
+        </button>
+        <div style="height: calc(var(--safe-b) + 8px)"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Toast -->
+<div id="toast"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><span id="toast-msg"></span></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+'use strict';
+
+// ══════════════════════════════
+// STATE
+// ══════════════════════════════
+const S = {
+  screen: 'screen-home',
+  history: [],
+  coords: null,
+  address: null,
+  capturedPhoto: null,
+  cameraStream: null,
+  facing: 'environment',
+  flashOn: false,
+  aiType: null,
+  aiDept: null,
+  aiEmoji: '⚠️',
+  refNum: null,
+  cdTimer: null,
+  cdVal: 5,
+  map: null,
+  mapMarker: null,
+};
+
+// ══════════════════════════════
+// NAVIGATION
+// ══════════════════════════════
+function navTo(id) {
+  if (id === S.screen) return;
+  const cur  = document.getElementById(S.screen);
+  const next = document.getElementById(id);
+  if (!cur || !next) return;
+  S.history.push(S.screen);
+  cur.classList.remove('active');
+  cur.classList.add('exit');
+  next.classList.add('active');
+  S.screen = id;
+  setTimeout(() => {
+    cur.classList.remove('exit');
+    // ensure hidden after transition so it can't bleed through
+  }, 340);
+  // screen hooks
+  if (id === 'screen-confirm') initConfirm();
+  if (id === 'screen-done')    initDone();
+}
+
+function navBack() {
+  if (!S.history.length) return;
+  const prev = S.history.pop();
+  const cur  = document.getElementById(S.screen);
+  const tgt  = document.getElementById(prev);
+  cur.classList.remove('active');
+  cur.classList.add('exit');
+  setTimeout(() => cur.classList.remove('exit'), 340);
+  tgt.classList.remove('exit');
+  tgt.classList.add('active');
+  S.screen = prev;
+}
+
+function goHome() {
+  S.history = [];
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active','exit'));
+  document.getElementById('screen-home').classList.add('active');
+  S.screen = 'screen-home';
+  stopCamera();
+}
+
+// ══════════════════════════════
+// DRAWER
+// ══════════════════════════════
+function openDrawer()  { document.getElementById('drawer').classList.add('open'); document.getElementById('drawer-overlay').classList.add('open'); }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawer-overlay').classList.remove('open'); }
+
+
+// ══════════════════════════════
+// GPS
+// ══════════════════════════════
+function initGPS() {
+  if (!navigator.geolocation) {
+    setGPSText('Hindi available', 'err', 'N/A');
+    return;
+  }
+  navigator.geolocation.watchPosition(onGPSSuccess, onGPSError, {
+    enableHighAccuracy: true, timeout: 12000, maximumAge: 4000
+  });
+}
+
+function onGPSSuccess(pos) {
+  const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+  S.coords = { lat, lng, acc };
+  const latS = lat.toFixed(5);
+  const lngS = lng.toFixed(5);
+  const accR = Math.round(acc);
+  setGPSText(`${latS}°N, ${lngS}°E`, acc < 40 ? 'good' : 'warn', `±${accR}m`);
+  reverseGeocode(lat, lng);
+}
+function onGPSError(e) {
+  setGPSText('Hindi makuha ang GPS', 'err', 'ERROR');
+}
+function setGPSText(txt, cls, acc) {
+  document.getElementById('gps-text').textContent = txt;
+  const badge = document.getElementById('gps-acc');
+  badge.textContent = acc;
+  badge.className = `gps-acc-tag ${cls}`;
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+      { headers: { 'Accept-Language': 'fil,en' } }
+    );
+    const d = await r.json();
+    const a = d.address || {};
+    const parts = [a.road, a.suburb || a.village || a.neighbourhood, a.city || a.municipality || a.town].filter(Boolean);
+    S.address = parts.length ? parts.join(', ') : d.display_name;
+    // update compose loc
+    document.getElementById('compose-loc').textContent = '📍 ' + S.address;
+    // update confirm if open
+    if (S.screen === 'screen-confirm') {
+      document.getElementById('c-address').textContent = S.address;
+    }
+  } catch(e) {
+    S.address = S.coords ? `${S.coords.lat.toFixed(4)}°N, ${S.coords.lng.toFixed(4)}°E` : 'Hindi makuha';
+    document.getElementById('compose-loc').textContent = '📍 ' + S.address;
+  }
+}
+
+// ══════════════════════════════
+// CONNECTIVITY
+// ══════════════════════════════
+function checkNet() {
+  const pill  = document.getElementById('status-pill');
+  const label = document.getElementById('status-label');
+  if (navigator.onLine) {
+    pill.className = 'status-pill online';
+    label.textContent = 'ONLINE';
+  } else {
+    pill.className = 'status-pill offline';
+    label.textContent = 'OFFLINE — SMS Mode';
+    showToast('⚠️ Offline — gagamit ng SMS fallback');
+  }
+}
+window.addEventListener('online',  checkNet);
+window.addEventListener('offline', checkNet);
+checkNet();
+
+// ══════════════════════════════
+// SOS HANDLER
+// ══════════════════════════════
+function handleSOS() {
+  S.capturedPhoto = null;
+  S.aiType = null;
+  navTo('screen-camera');
+  startCamera();
+}
+
+// ══════════════════════════════
+// CAMERA
+// ══════════════════════════════
+async function startCamera() {
+  const video   = document.getElementById('cam-video');
+  const blocked = document.getElementById('cam-blocked');
+  try {
+    if (S.cameraStream) stopCamera();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: S.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    S.cameraStream = stream;
+    video.srcObject = stream;
+    video.style.display = 'block';
+    blocked.style.display = 'none';
+    // start scan after camera warms up
+    setTimeout(() => { document.getElementById('scan-line').style.display = 'block'; }, 700);
+  } catch(err) {
+    video.style.display = 'none';
+    blocked.style.display = 'flex';
+    console.warn('Camera error:', err.name, err.message);
+  }
+}
+
+function stopCamera() {
+  if (S.cameraStream) {
+    S.cameraStream.getTracks().forEach(t => t.stop());
+    S.cameraStream = null;
+  }
+  document.getElementById('scan-line').style.display = 'none';
+  document.getElementById('ai-badge').style.display = 'none';
+}
+
+async function flipCamera() {
+  S.facing = S.facing === 'environment' ? 'user' : 'environment';
+  await startCamera();
+  showToast('📷 Camera napalitan');
+}
+
+function toggleFlash() {
+  if (!S.cameraStream) return;
+  const track = S.cameraStream.getVideoTracks()[0];
+  if (!track) return;
+  S.flashOn = !S.flashOn;
+  try {
+    track.applyConstraints({ advanced: [{ torch: S.flashOn }] });
+  } catch(e) { /* not all devices support */ }
+  const btn = document.getElementById('flash-btn');
+  btn.classList.toggle('flash-on', S.flashOn);
+  showToast(S.flashOn ? '⚡ Flash ON' : '⚡ Flash OFF');
+}
+
+function capturePhoto() {
+  const video  = document.getElementById('cam-video');
+  const canvas = document.getElementById('cam-canvas');
+  if (!S.cameraStream || !video.videoWidth) {
+    showToast('⚠️ Walang aktibong camera');
+    return;
+  }
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  S.capturedPhoto = canvas.toDataURL('image/jpeg', 0.85);
+
+  // show in gallery thumb
+  const img = document.getElementById('gal-img');
+  img.src = S.capturedPhoto; img.style.display = 'block';
+  document.getElementById('gal-icon').style.display = 'none';
+
+  // shutter flash
+  flashShutter();
+  showToast('📸 Larawan nakuha!');
+
+  // run AI sim then go to confirm
+  runAI(() => {
+    setTimeout(() => { stopCamera(); navTo('screen-confirm'); }, 600);
+  });
+}
+
+function flashShutter() {
+  const vf = document.getElementById('cam-vf');
+  const f = Object.assign(document.createElement('div'), {
+    style: 'position:absolute;inset:0;background:white;z-index:20;pointer-events:none;opacity:0.85;transition:opacity 0.18s'
+  });
+  vf.appendChild(f);
+  requestAnimationFrame(() => { f.style.opacity = '0'; setTimeout(() => f.remove(), 200); });
+}
+
+function openGallery() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      S.capturedPhoto = ev.target.result;
+      const img = document.getElementById('gal-img');
+      img.src = S.capturedPhoto; img.style.display = 'block';
+      document.getElementById('gal-icon').style.display = 'none';
+      showToast('🖼️ Larawan pinili');
+      runAI(() => {});
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+
+// ══════════════════════════════
+// AI CLASSIFICATION (simulated)
+// ══════════════════════════════
+const AI_TYPES = [
+  { type: 'Sunog / Apoy',         dept: 'Bureau of Fire Protection (BFP)', emoji: '🔥', conf: 94 },
+  { type: 'Baha / Tubig',         dept: 'CDRRMO / Disaster Risk Office',   emoji: '🌊', conf: 88 },
+  { type: 'Aksidente / Banggaan', dept: 'PNP + Emergency Medical Services', emoji: '🚗', conf: 91 },
+  { type: 'Medikal / Emerhensya', dept: 'Rural Health Unit (RHU) / EMS',   emoji: '🏥', conf: 86 },
+  { type: 'Krimen / Panganib',    dept: 'Philippine National Police (PNP)', emoji: '🚔', conf: 89 },
+];
+
+function runAI(cb) {
+  const badge = document.getElementById('ai-badge');
+  badge.style.display = 'none';
+  document.getElementById('ai-type').textContent = '...';
+  document.getElementById('ai-conf').textContent  = 'Nagsusuri...';
+
+  setTimeout(() => {
+    const pick = AI_TYPES[Math.floor(Math.random() * AI_TYPES.length)];
+    S.aiType  = pick.type;
+    S.aiDept  = pick.dept;
+    S.aiEmoji = pick.emoji;
+    document.getElementById('ai-type').textContent = `${pick.emoji} ${pick.type}`;
+    document.getElementById('ai-conf').textContent  = `${pick.conf}% confidence · → ${pick.dept}`;
+    badge.style.display = 'block';
+    cb && cb();
+  }, 900);
+}
+
+// ══════════════════════════════
+// CONFIRM SCREEN
+// ══════════════════════════════
+function initConfirm() {
+  // photo
+  const img = document.getElementById('photo-preview');
+  const plc = document.getElementById('photo-thumb');
+  if (S.capturedPhoto) {
+    img.src = S.capturedPhoto; img.style.display = 'block';
+    plc.querySelector('i').style.display = 'none';
+    plc.querySelector('span') && (plc.querySelector('span').style.display = 'none');
+  } else {
+    img.style.display = 'none';
+  }
+
+  // AI result
+  document.getElementById('c-type').textContent = S.aiType ? `${S.aiEmoji} ${S.aiType}` : '⚠️ Di pa na-classify';
+  document.getElementById('c-dept').textContent  = S.aiDept ? `Ipapadala sa: ${S.aiDept}` : 'Pumili ng uri sa compose';
+  document.getElementById('type-icon').textContent = S.aiEmoji || '⚠️';
+
+  // address
+  document.getElementById('c-address').textContent = S.address || 'Naglo-load...';
+  if (S.coords) {
+    document.getElementById('c-coords').textContent =
+      `${S.coords.lat.toFixed(5)}°N, ${S.coords.lng.toFixed(5)}°E · ±${Math.round(S.coords.acc)}m`;
+  }
+
+  // time & ref
+  const now   = new Date();
+  const DAYS  = ['Linggo','Lunes','Martes','Miyerkules','Huwebes','Biyernes','Sabado'];
+  const MONS  = ['Ene','Peb','Mar','Abr','Mayo','Hun','Hul','Ago','Set','Okt','Nob','Dis'];
+  const h     = now.getHours().toString().padStart(2,'0');
+  const m     = now.getMinutes().toString().padStart(2,'0');
+  document.getElementById('c-time').textContent =
+    `${h}:${m} ${now.getHours()<12?'AM':'PM'} · ${DAYS[now.getDay()]}, ${MONS[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+  S.refNum = `DRR-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${(1000+Math.floor(Math.random()*8999))}`;
+  document.getElementById('c-ref').textContent = `REFNUM: ${S.refNum}`;
+
+  // GPS chips
+  if (S.coords) {
+    const acc = S.coords.acc;
+    const chip = document.getElementById('chip-acc');
+    chip.className = acc < 30 ? 'vchip ok' : 'vchip warn';
+    chip.innerHTML = `<div class="vdot ${acc<30?'ok':'warn'}"></div>±${Math.round(acc)}m`;
+  }
+
+  // map
+  setTimeout(buildMap, 120);
+}
+
+function buildMap() {
+  if (S.map) { S.map.remove(); S.map = null; }
+  const lat = S.coords?.lat ?? 14.8292;
+  const lng = S.coords?.lng ?? 121.0457;
+
+  S.map = L.map('confirm-map', {
+    center: [lat, lng], zoom: 16,
+    zoomControl: true, attributionControl: false,
+    dragging: true, scrollWheelZoom: false, tap: false
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(S.map);
+
+  const pinIcon = L.divIcon({
+    className: '', html: '<div class="map-pin-div"></div>',
+    iconSize: [28, 28], iconAnchor: [14, 28]
+  });
+  S.mapMarker = L.marker([lat, lng], { icon: pinIcon }).addTo(S.map);
+  S.map.invalidateSize();
+}
+
+// ══════════════════════════════
+// COUNTDOWN
+// ══════════════════════════════
+function startCountdown() {
+  const ov = document.getElementById('countdown-overlay');
+  const el = document.getElementById('cd-num');
+  S.cdVal = 5; el.textContent = 5;
+  ov.classList.add('active');
+  S.cdTimer = setInterval(() => {
+    S.cdVal--;
+    el.textContent = S.cdVal;
+    if (S.cdVal <= 0) {
+      clearInterval(S.cdTimer);
+      ov.classList.remove('active');
+      navTo('screen-done');
+    }
+  }, 1000);
+}
+function cancelCountdown() {
+  clearInterval(S.cdTimer);
+  document.getElementById('countdown-overlay').classList.remove('active');
+  showToast('Kanselado ang pagpapadala');
+}
+
+// ══════════════════════════════
+// DONE SCREEN
+// ══════════════════════════════
+function initDone() {
+  document.getElementById('done-ref').textContent = S.refNum || `DRR-${Date.now()}`;
+  document.getElementById('done-desc').textContent =
+    `Naipadala na ang iyong ulat sa ${S.aiDept || 'kaukulang departamento'}. Mangyaring maghintay at manatiling ligtas.`;
+  document.getElementById('done-dispatch').innerHTML =
+    `📢 Naipadala sa: ${S.aiDept || 'CDRRMO'}<br>⏱ Response time: ~5–10 minuto`;
+}
+
+function shareReport() {
+  if (navigator.share) {
+    navigator.share({
+      title: 'DRR Alert — Emergency Report',
+      text: `Emergency report ${S.refNum}: ${S.aiType} sa ${S.address || 'aking lokasyon'}. Ipinadala via DRR Alert.`,
+    }).catch(() => {});
+  } else {
+    showToast('Share hindi available sa browser na ito');
+  }
+}
+
+// ══════════════════════════════
+// COMPOSE SUBMIT
+// ══════════════════════════════
+const COMPOSE_MAP = {
+  sunog:            { type: 'Sunog / Apoy',          dept: 'Bureau of Fire Protection (BFP)', emoji: '🔥' },
+  baha:             { type: 'Baha / Tubig',           dept: 'CDRRMO / DSWD',                  emoji: '🌊' },
+  aksidente:        { type: 'Aksidente / Banggaan',   dept: 'PNP + Emergency Medical Services',emoji: '🚗' },
+  medikal:          { type: 'Medikal / Sugat',        dept: 'Rural Health Unit / EMS',         emoji: '🏥' },
+  krimen:           { type: 'Krimen / Banta',         dept: 'Philippine National Police',      emoji: '🚔' },
+  lindol:           { type: 'Lindol / Pagyanig',      dept: 'CDRRMO / NDRRMC',                 emoji: '🌍' },
+  'sunog-kagubatan':{ type: 'Sunog ng Kagubatan',     dept: 'DENR + BFP',                      emoji: '🌿' },
+  iba:              { type: 'Iba Pang Emergency',     dept: 'Barangay Hall / CDRRMO',          emoji: '⚠️' },
+};
+
+function submitCompose() {
+  const type = document.getElementById('ctype').value;
+  const desc = document.getElementById('cdesc').value.trim();
+  if (!type) { showToast('⚠️ Pumili muna ng uri ng emergency'); return; }
+  if (desc.length < 10) { showToast('⚠️ Magbigay ng mas detalyadong paglalarawan'); return; }
+
+  const pick = COMPOSE_MAP[type] || COMPOSE_MAP.iba;
+  S.aiType   = pick.type;
+  S.aiDept   = pick.dept;
+  S.aiEmoji  = pick.emoji;
+  S.capturedPhoto = null;
+  navTo('screen-confirm');
+}
+
+// ══════════════════════════════
+// TOAST
+// ══════════════════════════════
+let _toastT;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = ' ' + msg;
+  t.classList.add('show');
+  clearTimeout(_toastT);
+  _toastT = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ══════════════════════════════
+// PWA MANIFEST + SERVICE WORKER
+// ══════════════════════════════
+// Inject manifest dynamically
+(function injectManifest() {
+  const manifest = {
+    name: 'DRR Alert — Barangay Emergency Response',
+    short_name: 'DRR Alert',
+    description: 'Mag-ulat ng emergency sa iyong barangay',
+    start_url: '.',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#ffffff',
+    theme_color: '#C0001A',
+    icons: [
+      { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%23C0001A'/%3E%3Ctext x='96' y='136' font-size='110' text-anchor='middle'%3E🆘%3C/text%3E%3C/svg%3E", sizes: '192x192', type: 'image/svg+xml' },
+      { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23C0001A'/%3E%3Ctext x='256' y='360' font-size='300' text-anchor='middle'%3E🆘%3C/text%3E%3C/svg%3E", sizes: '512x512', type: 'image/svg+xml' }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const link = Object.assign(document.createElement('link'), {
+    rel: 'manifest', href: URL.createObjectURL(blob)
+  });
+  document.head.appendChild(link);
+})();
+
+// Service worker for offline caching
+if ('serviceWorker' in navigator) {
+  const sw = `
+    const CACHE='drr-v2';
+    self.addEventListener('install', e => {
+      self.skipWaiting();
+      e.waitUntil(
+        caches.open(CACHE).then(c => c.add(self.location.href))
+      );
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(caches.keys().then(keys =>
+        Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))
+      ));
+    });
+    self.addEventListener('fetch', e => {
+      if (e.request.method !== 'GET') return;
+      e.respondWith(
+        caches.match(e.request).then(r => r ||
+          fetch(e.request).then(res => {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+            return res;
+          }).catch(() => caches.match(e.request))
+        )
+      );
+    });
+  `;
+  const swBlob = new Blob([sw], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+}
+
+// ══════════════════════════════
+// INIT
+// ══════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initGPS();
+  // Prevent pull-to-refresh on iOS
+  document.addEventListener('touchmove', e => {
+    if (e.target.closest('.screen-scroll')) return;
+    e.preventDefault();
+  }, { passive: false });
+});
+</script>
+</body>
+</html>
