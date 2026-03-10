@@ -1,10 +1,11 @@
 {
-  "name": "DRR Alert",
-  "short_name": "DRR Alert",
-  "start_url": "/",
+  "name": "DRR SJDM PWA",
+  "short_name": "DRR SJDM",
+  "start_url": "/DRR_SJDM_PWA/",
+  "scope": "/DRR_SJDM_PWA/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "theme_color": "#4CAF50",
   "icons": [
     {
       "src": "images/icon_192.png",
